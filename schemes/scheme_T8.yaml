@@ -1,0 +1,76 @@
+# ============================================================
+# 方案 T8：Turbo 8 步加速版（fp16 激活，Turing 适配）
+# ------------------------------------------------------------
+# 目标硬件：24GB+ 显存（RTX 8000 Turing 48GB 实测档位；任何 GPU 可用，
+#           fp16 激活尤其适配无 BF16 Tensor Core 的 Turing sm_75）
+# 模型来源：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit（SDNQ 4bit 量化）
+# 加速来源：官方 Lightning turbo LoRA（8 步蒸馏，lightx2v/Minimax-h3-Turbo）
+# 性能预期：基线 20-30 步 → 8 步，提速约 3 倍；官方文档提示音频和动态质量略有下降
+#
+# 关键差异（相对方案 A）：
+#   - precision: sdnq_uint4_fp16 —— SDNQ 权重 uint4 + 激活 fp16
+#     （Turing 无 BF16 Tensor Core，bf16 激活会退化为 CUDA core 模拟，慢 10-50 倍）
+#   - turbo LoRA 通过 accelerators/lora_loader.py 旁路 adapter 注入
+#     （ComfyUI 格式 key 映射 + fused qkv 拆分，见该文件头注释）
+#   - SageAttention 禁用：int8_fp8 backend 的 FP8 PV 路径需 sm_89+，Turing 不支持
+#   - FirstBlockCache 禁用：8 步蒸馏下每步都关键，残差复用收益小且易伤质量
+#   - TE-Speed 禁用：8 步 sigma 差 0.125 > 0.12 虽天然不触发，但明确关闭防误用
+# ============================================================
+scheme: T8
+name: Turbo 8 步加速版（fp16 激活，Turing 适配）
+description: "[L2策略] 官方 Lightning turbo LoRA 蒸馏，8 步生成（提速约 3 倍）。fp16 激活适配 Turing。音频和动态质量略有下降。仅 FL2VA"
+vram_required: 24GB
+
+# 模型来源（SDNQ 4bit 量化版，与方案 A 相同）
+model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+model_subdir: sdnq_format
+precision: sdnq_uint4_fp16
+size_gb: 75
+
+# 加载策略（与方案 A 相同的 L2：TE 临时上 GPU 编码后回 CPU）
+offload_level: L2
+device: cuda:0
+
+# 加速方案
+acceleration:
+  sage_attention:
+    enabled: false                # FP8 PV 需 sm_89+，Turing（sm_75）不支持
+    backend: int8_fp8
+  lora:
+    enabled: true
+    name: turbo_fl2v_8step
+    path: loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+    scale: 1.0                     # 官方 turbo_mode 默认强度 1.0
+    supports_paradigms: [FL2VA]    # 官方 8 步仅 FL2VA
+  first_block_cache:
+    enabled: false                 # 8 步蒸馏下禁用，避免跳步伤质量
+    threshold: 0.05
+  te_speed_cache:
+    enabled: false                 # v0.7.7+ T3.2：turbo 蒸馏方案明确禁用（8 步 sigma 差 0.125 > 0.12 天然不触发）
+    control_value: 0.12
+    percent_1: 0.1
+    percent_2: 0.9
+    start_block_ratio: 0.5
+    device: cuda
+
+# 显存优化
+block_swap:
+  enabled: false
+vae_tiling:
+  enabled: false
+
+# 推理参数（官方 turbo_mode：turbo_steps 默认 8，未要求下调 cfg）
+inference:
+  num_inference_steps: 8
+  scheduler: simple
+  sampler: euler
+  guidance_scale: 7.0
+  flow_shift: 12.0            # 官方 8 步 turbo：视频 shift=12
+  audio_flow_shift: 3.0       # 官方 8 步 turbo：音频 shift=3
+  default_resolution: 864x480   # 官方 0.4MP 默认
+  default_fps: 24
+  default_duration: 5
+
+# 适用 variant（与 manifest variants.schemes 字段对应；官方 8 步仅 FL2VA）
+applicable_variants:
+  - MiniMax/H3-FL2VA-SDNQ

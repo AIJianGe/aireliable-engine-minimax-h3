@@ -1,0 +1,73 @@
+# ============================================================
+# 方案 B：12-16G 显存可用版
+# ------------------------------------------------------------
+# 目标硬件：RTX 3060 12GB / 4060 Ti 16GB / 4070 12GB
+# 模型来源：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit（SDNQ 4bit 量化，~75GB）
+# 性能预期：5 秒 480p 视频 ~3-5 分钟，质量略有损失
+#
+# 加速组合：
+#   - SageAttention（INT8 QK + FP8 PV）：1.5-2x 加速
+#   - LightX2V Turbo LoRA（8-step 蒸馏）：6x 加速（仅 FL2VA，质量更稳）
+#   - TE-Speed 块级缓存（sigma 差先验，v0.7.7+）：8 步 sigma 差 0.125 略超阈值，命中少；步数调高自动生效
+#   - 不启用 FirstBlockCache（12G 显存下不稳定）
+#   - 不启用 BlockSwap（与 L2 offload 冲突，L2 已足够）
+#   - 不启用 VAE tiling
+# ============================================================
+scheme: B
+name: 12-16G 显存可用版
+description: "[L2策略] RTX 3060 12G / 4060 Ti 16G，5秒480p约3-5min。TE临时上GPU编码后回CPU，VRAM稳态28GB/峰值48GB，RAM 20GB，适合24-48GB显存"
+vram_required: 12GB
+
+# 模型来源（SDNQ 4bit 量化版）
+model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+model_subdir: sdnq_format
+precision: sdnq_uint4
+size_gb: 75
+
+# 加载策略
+offload_level: L2  # 层级别 offload
+device: cuda:0
+
+# 加速方案
+acceleration:
+  sage_attention:
+    enabled: true
+    backend: int8_fp8
+  lora:
+    enabled: true
+    name: lightx2v_turbo_8step
+    path: loras/lightx2v_turbo_8step.safetensors
+    scale: 1.0
+    supports_paradigms: [FL2VA]
+  first_block_cache:
+    enabled: false  # 12G 显存下不稳定，关闭
+  te_speed_cache:
+    enabled: true                  # v0.7.7+ T3.2：8 步 sigma 差 0.125 > 0.12 天然不触发，无副作用；步数调高自动生效
+    control_value: 0.12
+    percent_1: 0.1
+    percent_2: 0.9
+    start_block_ratio: 0.5
+    device: cuda
+
+# 显存优化
+block_swap:
+  enabled: false
+vae_tiling:
+  enabled: false
+
+# 推理参数（8-step 质量更稳）
+inference:
+  num_inference_steps: 8
+  scheduler: simple
+  sampler: euler
+  guidance_scale: 7.0
+  flow_shift: 12.0            # 与模型 checkpoint 默认一致（视频 shift=12）
+  audio_flow_shift: 3.0       # 与模型 checkpoint 默认一致（音频 shift=3）
+  default_resolution: 608x352   # 官方 0.2MP 最低，适配 12G 显存
+  default_fps: 24
+  default_duration: 5
+
+# 适用 variant
+applicable_variants:
+  - MiniMax/H3-FL2VA-SDNQ
+  - MiniMax/H3-Ref2VA-SDNQ

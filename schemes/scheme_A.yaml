@@ -1,0 +1,78 @@
+# ============================================================
+# 方案 A：24G 显存流畅版（推荐默认）
+# ------------------------------------------------------------
+# 目标硬件：RTX 3090 / 4090 / 5090（24GB 显存）
+# 模型来源：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit（SDNQ 4bit 量化，~75GB）
+# 性能预期：5 秒 768p 视频 ~1-2 分钟，质量接近 BF16 原版
+#
+# 加速组合：
+#   - SageAttention（INT8 QK + FP8 PV）：1.5-2x 加速
+#   - LightX2V Turbo LoRA（4-step 蒸馏）：6-12x 加速（仅 FL2VA）
+#   - TE-Speed 块级缓存（sigma 差先验 + 尾部块跳过）：~45% 加速（v0.7.7+，替代 FirstBlockCache）
+#   - 不启用 BlockSwap（24G 显存足够）
+#   - 不启用 VAE tiling
+# ============================================================
+scheme: A
+name: 24G 显存流畅版
+description: "[L2策略] RTX 3090/4090/5090，5秒768p约1-2min。TE临时上GPU编码后回CPU，VRAM稳态28GB/峰值48GB，RAM 20GB，适合24-48GB显存"
+vram_required: 24GB
+
+# 模型来源（SDNQ 4bit 量化版）
+model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+model_subdir: sdnq_format
+precision: sdnq_uint4
+size_gb: 75
+
+# 加载策略
+# v0.6.14+ 修订：L2 模式下 TE 临时上 GPU 编码 prompt（快速），编码后 hook 自动下 CPU
+# - TE 上 GPU 时：transformer(17.5GB) + TE(19.6GB) = 37GB（vae 已临时下 CPU）
+# - TE 编码后：hook 触发，TE 下 CPU，vae 恢复 GPU → 24GB + attention 空间
+# - 关键：L2 模式不用 _patch_prompt_embeds_device，让 TE 在 GPU 编码（hook 才能触发）
+# 适用于 24GB+ 显存场景（你的硬件：48GB VRAM 完全匹配）
+offload_level: L2
+device: cuda:0
+
+# 加速方案
+acceleration:
+  sage_attention:
+    enabled: true
+    backend: int8_fp8   # INT8 QK + FP8 PV
+  lora:
+    enabled: false                 # v0.2 临时禁用：LoRA 文件未下载，4-step 无 LoRA 无法收敛
+    name: lightx2v_turbo_4step
+    path: loras/lightx2v_turbo_4step.safetensors
+    scale: 1.0
+    supports_paradigms: [FL2VA]   # LightX2V 仅支持 FL2VA
+  first_block_cache:
+    enabled: false                 # v0.7.7+ 由 TE-Speed 块级缓存替代（patcher 互斥，FBC 不再注入）
+    threshold: 0.05
+  te_speed_cache:
+    enabled: true                  # v0.7.7+ T3.2：30 步 sigma 差 ≈0.033 < 0.12，尾部块高命中 ~45% 加速
+    control_value: 0.12            # sigma 差阈值（相邻 step 差小于此值且处于窗口内才复用）
+    percent_1: 0.1                 # 前 10% step 强制完全计算
+    percent_2: 0.9                 # 最后 10% step 强制完全计算
+    start_block_ratio: 0.5         # 尾部段起点（后 50% 块参与缓存；显存受限可调低）
+    device: cuda                   # 缓存存储设备（cpu 命中时搬回 GPU 一次，省显存）
+
+# 显存优化
+block_swap:
+  enabled: false
+vae_tiling:
+  enabled: false
+
+# 推理参数
+inference:
+  num_inference_steps: 30        # v0.2 临时调高：LoRA 禁用后用标准步数（4 步仅为 LoRA 蒸馏设计）
+  scheduler: simple
+  sampler: euler
+  guidance_scale: 7.0
+  flow_shift: 12.0            # 与模型 checkpoint 默认一致（视频 shift=12）
+  audio_flow_shift: 3.0       # 与模型 checkpoint 默认一致（音频 shift=3）
+  default_resolution: 864x480   # 官方 0.4MP 默认
+  default_fps: 24
+  default_duration: 5
+
+# 适用 variant（与 manifest variants.schemes 字段对应）
+applicable_variants:
+  - MiniMax/H3-FL2VA-SDNQ
+  - MiniMax/H3-Ref2VA-SDNQ

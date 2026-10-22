@@ -1,0 +1,75 @@
+# ============================================================
+# 方案 T4：Turbo 4 步极速版（fp16 激活，Turing 适配）
+# ------------------------------------------------------------
+# 目标硬件：24GB+ 显存（fp16 激活适配 Turing sm_75）
+# 模型来源：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit（SDNQ 4bit 量化）
+# 加速来源：官方 turbo LoRA（4 步蒸馏，Comfy-Org/MiniMax-H3 loras/）
+# 性能预期：基线 20-30 步 → 4 步，提速约 5-6 倍；音频和动态质量略降，适合快速预览
+#
+# 范式感知（lora_loader.py 自动处理）：
+#   - FL2VA（pipe.transformer）→ path（768p 优化 4 步 LoRA）
+#   - Ref2VA（pipe.transformer_ref）→ ref2v_path（ref2v 专用 4 步 LoRA）
+#
+# 关键差异（相对方案 T8）：4 步 + Ref2VA 支持（ref2v 专用 LoRA）
+# TE-Speed 禁用：4 步 sigma 差 0.25 > 0.12 天然不触发，但明确关闭防误用
+# ============================================================
+scheme: T4
+name: Turbo 4 步极速版（fp16 激活，Turing 适配）
+description: "[L2策略] 官方 turbo LoRA 蒸馏，4 步生成（提速约 5-6 倍）。FL2VA 用 768p 优化 4 步 LoRA，Ref2VA 用 ref2v 专用 LoRA（自动范式感知）。音频和动态质量略降。适合快速预览"
+vram_required: 24GB
+
+# 模型来源（SDNQ 4bit 量化版，与方案 A 相同）
+model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+model_subdir: sdnq_format
+precision: sdnq_uint4_fp16
+size_gb: 75
+
+# 加载策略（与方案 A 相同的 L2：TE 临时上 GPU 编码后回 CPU）
+offload_level: L2
+device: cuda:0
+
+# 加速方案
+acceleration:
+  sage_attention:
+    enabled: false                # FP8 PV 需 sm_89+，Turing（sm_75）不支持
+    backend: int8_fp8
+  lora:
+    enabled: true
+    name: turbo_4step
+    path: loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors      # FL2VA 主路径
+    ref2v_path: loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors     # Ref2VA 专用（v0.7+）
+    scale: 1.0
+    supports_paradigms: [FL2VA, Ref2VA]
+  first_block_cache:
+    enabled: false                 # 4 步蒸馏下禁用，避免跳步伤质量
+    threshold: 0.05
+  te_speed_cache:
+    enabled: false                 # v0.7.7+ T3.2：turbo 蒸馏方案明确禁用（4 步 sigma 差 0.25 > 0.12 天然不触发）
+    control_value: 0.12
+    percent_1: 0.1
+    percent_2: 0.9
+    start_block_ratio: 0.5
+    device: cuda
+
+# 显存优化
+block_swap:
+  enabled: false
+vae_tiling:
+  enabled: false
+
+# 推理参数（官方 turbo 4 步；cfg 维持 7.0，画质异常时可实测下调）
+inference:
+  num_inference_steps: 4
+  scheduler: simple
+  sampler: euler
+  guidance_scale: 7.0
+  flow_shift: 6.0             # 官方 4 步 768p 版：视频 shift=6
+  audio_flow_shift: 3.0       # 官方 4 步 768p 版：音频 shift=3
+  default_resolution: 864x480   # 官方 0.4MP 默认
+  default_fps: 24
+  default_duration: 5
+
+# 适用 variant（与 manifest variants.schemes 字段对应）
+applicable_variants:
+  - MiniMax/H3-FL2VA-SDNQ
+  - MiniMax/H3-Ref2VA-SDNQ

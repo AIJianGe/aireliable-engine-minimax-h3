@@ -1,0 +1,608 @@
+# ============================================================
+# MiniMax-H3 Video 引擎 manifest（v0.6+，多方案版）
+# ------------------------------------------------------------
+# v0.6+ 决策（多方案架构升级 v2.0）：
+#   - paradigm: integrated（全自定义模式，继承 CustomEngine）
+#   - 模型布局：video/minimax-h3/（根目录，子目录由 variant.path 决定）
+#   - 能力：text-to-video（文本生成视频，FL2VA / Ref2VA 双范式）
+#     v0.7+：新增 ref2va 多模态参考模式（图≤9 / 视频≤3 / 音频≤3 混合参考，
+#             按组合自动判定场景：对口型 / 音色参考 / 动作迁移；音频须配对图/视频）
+#   - 双套模型文件：
+#       * SDNQ 4bit 量化版（OzzyGT/MiniMax_H3_sdnq_dynamic_4bit，~75GB，方案 A/B/C 用）
+#       * BF16 原版（MiniMaxAI/MiniMax-H3，~134GB，方案 D 用）
+#   - 4 个方案：A（24G 流畅）/ B（12-16G 可用）/ C（8G 极低配）/ D（BF16 原版）
+#
+# 字段规范详见 PR/development-guide.md §30 manifest.yaml v0.2 规范
+# 校验逻辑见 core/src/core/manifest_schema.py
+#
+# 模型下载：
+#   方案 A/B/C（SDNQ 4bit）：下载到 models/video/minimax-h3/sdnq_format/
+#       仓库：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+#   方案 D（BF16 原版）：下载到 models/video/minimax-h3/diffusers_format/
+#       仓库：MiniMaxAI/MiniMax-H3
+#
+# 模型目录结构（双套并存）：
+#   models/video/minimax-h3/
+#     ├── sdnq_format/                     ← SDNQ 4bit 量化版（方案 A/B/C 用）
+#     │   ├── model_index.json
+#     │   ├── modular_model_index.json
+#     │   ├── transformer/                  ← FL2VA transformer（量化版）
+#     │   ├── transformer_ref/             ← Ref2VA transformer（量化版）
+#     │   ├── text_encoder/                 ← Qwen3VL-32B 文本编码器（量化版）
+#     │   ├── vae/                          ← 视频 VAE
+#     │   ├── audio_vae/                    ← 音频 VAE
+#     │   ├── scheduler/                    ← 视频调度器
+#     │   ├── audio_scheduler/              ← 音频调度器
+#     │   ├── processor/                    ← Qwen3VL 处理器
+#     │   ├── tokenizer/                    ← Qwen2 分词器
+#     │   └── loras/                        ← 加速 LoRA（LightX2V Turbo）
+#     └── diffusers_format/                 ← BF16 原版（方案 D 用）
+#         ├── model_index.json
+#         ├── modular_model_index.json
+#         ├── transformer/                  ← FL2VA transformer（BF16 原版）
+#         ├── transformer_ref/             ← Ref2VA transformer（BF16 原版）
+#         ├── text_encoder/                 ← Qwen3VL-32B 文本编码器（BF16 原版）
+#         ├── vae/                          ← 视频 VAE
+#         ├── audio_vae/                    ← 音频 VAE
+#         ├── scheduler/                    ← 视频调度器
+#         ├── audio_scheduler/              ← 音频调度器
+#         ├── processor/                    ← Qwen3VL 处理器
+#         ├── tokenizer/                    ← Qwen2 分词器
+#         └── loras/                        ← 用户 LoRA
+# ============================================================
+
+# ===== v0.1 必需字段 =====
+engine_id: minimax_h3_video_a1b2c3
+engine_name: MiniMax-H3 Video
+engine_version: 0.6.0
+aireliable_compat: ">=0.0.16"
+uv_env_name: video-minimax-h3
+export_mode: source
+
+# ===== v0.1 可选字段 =====
+description: "MiniMax-H3 视频生成引擎（多方案版，支持 SDNQ 4bit 量化 + BF16 原版双套模型，4 档方案 A/B/C/D）"
+
+# ===== v0.2 新增字段 =====
+engine_uid: aireliable://aijiange/video/minimax_h3_video_a1b2c3
+paradigm: integrated
+sdk_version: ">=0.3.0"
+
+# 作者信息（v0.2.7：author 重新定义为"创建引擎的作者"，不再是第三方开源项目方）
+author:
+  name: AI剑歌
+
+# 第三方开源引用（v0.2.7 新增：记录引擎引用的第三方开源模型/代码）
+third_party_references:
+  - name: MiniMax-H3
+    author: MiniMaxAI
+    github: https://github.com/MiniMax-AI/MiniMax-H3
+    website: https://github.com/MiniMax-AI/MiniMax-H3
+    license: MiniMax H3 Community License
+    description: 引擎核心视频生成（文本转视频）能力来自 MiniMaxAI 的 MiniMax-H3 模型
+  - name: MiniMax_H3_sdnq_dynamic_4bit
+    author: OzzyGT
+    github: https://huggingface.co/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+    website: https://huggingface.co/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+    license: MiniMax H3 Community License
+    description: SDNQ 4bit 动态量化版（方案 A/B/C 使用，降低显存占用至 24GB 以下）
+
+# 来源信息
+source:
+  type: github
+  github_repo: MiniMax-AI/MiniMax-H3
+  branch: main
+
+# 升级信息
+upgrade:
+  check_url: https://api.github.com/repos/MiniMax-AI/MiniMax-H3/releases/latest
+  auto_check: false
+
+# 节点包依赖（integrated 范式不依赖节点包）
+node_packages: []
+
+# ============================================================
+# v0.2.5+ 引擎环境配置（env_config 块）
+# 供 EngineEnvManager 读取以决定是否检测 torch、默认 CUDA 版本等。
+# 字段规范详见 core/src/core/manifest_schema.py EnvConfigSchema
+#
+# MiniMax-H3 基于 torch 执行 GPU 视频生成推理，依赖 torch>=2.5.0。
+# 支持 CPU offload（大模型分级卸载到 CPU，降低显存占用）。
+# ============================================================
+env_config:
+  requires_torch: true
+  torch_version_constraint: '>=2.5.0'
+  default_cuda_version: cu121
+  supported_cuda_versions:
+    - cu121
+    - cu124
+    - cu126
+    - cu128
+  requires_python: '>=3.10,<3.13'
+  notes: 'MiniMax-H3 基于 torch 执行 GPU 视频生成推理，支持 CPU offload 分级卸载'
+  # v0.2.12+ 引擎推荐版本组合：切换 torch 时优先使用此组合
+  recommended_versions:
+    torch: '2.5.1'
+    torchvision: null
+    torchaudio: null
+    reason: 'MiniMax-H3 测试通过的稳定版本组合（torch 2.5.1）'
+  # CPU offload 配置（大模型分级卸载，降低显存占用）
+  # 规范：development-guide.md §37.2.7 CPU Offload 等级规范
+  # 需求：requirements.md §35 v0.4.x CPU Offload 等级需求
+  # L0: 全 GPU（所有模型常驻 GPU，需 ≥80GB 显存）
+  # L1: Text Encoder 卸载（TE 编码完后移到 CPU，Transformer+VAE 常驻 GPU，需 ≥48GB 显存）
+  # L2: 层级别 offload（Transformer 每层按需搬入 GPU，需 ≥24GB 显存，慢 3-5×）
+  # L3: 激进 offload（全部模型在 CPU，仅计算时搬入 + VAE tiling，慢 10×+）
+  cpu_offload:
+    supported: true
+    default_level: auto
+    levels:
+      L0:
+        name: "全 GPU"
+        description: "所有模型常驻 GPU，速度最快"
+        min_vram_gb: 80
+      L1:
+        name: "Text Encoder 卸载"
+        description: "TE 编码完后移到 CPU，Transformer+VAE 常驻 GPU"
+        min_vram_gb: 48
+      L2:
+        name: "层级别 offload"
+        description: "Transformer 每层按需搬入 GPU，速度慢 3-5 倍"
+        min_vram_gb: 24
+      L3:
+        name: "激进 offload"
+        description: "全部模型在 CPU，仅计算时搬入，速度慢 10 倍+"
+        min_vram_gb: 0
+
+# ============================================================
+# v0.2.1 新增：models 块（模型分类规范化）
+# 详见 PR/architecture.md §16.4 manifest.models 块
+#
+# v0.6+ 多方案架构升级（v2.0）：
+#   - 双套模型文件：SDNQ 4bit（方案 A/B/C）+ BF16 原版（方案 D）
+#   - 4 个变体：SDNQ FL2VA / SDNQ Ref2VA / BF16 FL2VA / BF16 Ref2VA
+#   - 4 个方案：A（24G 流畅）/ B（12-16G 可用）/ C（8G 极低配）/ D（BF16 原版）
+#   - variant 与方案通过 schemes 字段关联
+# ============================================================
+models:
+  # ===== 模型目录布局 =====
+  # v0.6+ base 改为根目录，子目录由 variant.path 决定（sdnq_format/ 或 diffusers_format/）
+  model_layout:
+    base: video/minimax-h3/
+    lora: video/minimax-h3/sdnq_format/loras/
+
+  # ===== 默认 variant（v0.6+ 改为 SDNQ 4bit 量化版，降低默认显存需求）=====
+  # BaseEngine.infer 的 auto-load 优先级：request.variant > default_variant > None
+  # 选 SDNQ FL2VA 作为默认（文本直接生成视频，使用场景最广，且显存需求低）
+  default_variant: MiniMax/H3-FL2VA-SDNQ
+
+  # ===== 模型变体列表（v0.6+ 4 个变体，按精度排序）=====
+  # v0.3.6+ variant.name 必须为 author/model 格式（命名空间规范）
+  # FL2VA：Full Latent to Video Audio（文本直接生成含音频的视频）
+  # Ref2VA：Reference to Video Audio（参考图 + 文本生成含音频的视频）
+  #
+  # schemes 字段（v0.6+ 新增）：声明该 variant 适用的方案列表
+  #   - SDNQ 4bit variant 适用方案 A/B/C
+  #   - BF16 原版 variant 适用方案 D
+  variants:
+    # ----- 1. SDNQ 4bit FL2VA（方案 A/B/C 用，推荐默认） -----
+    - name: MiniMax/H3-FL2VA-SDNQ
+      alias: H3-FL2VA-4bit
+      base_model: FL2VA
+      precision: sdnq_uint4
+      loader: minimax
+      vram_required: 24GB  # 最低显存需求（方案 A），方案 C 可降至 8GB
+      path: video/minimax-h3/sdnq_format/transformer
+      schemes: [A, B, C, T8, T4]   # v0.7+ 新增 T8/T4 turbo 方案（官方 turbo LoRA 蒸馏，8/4 步）
+      model_file_ids:
+        - h3-sdnq-fl2va-transformer          # SDNQ FL2VA transformer（marker 整仓下载）
+        - h3-sdnq-shared-components          # SDNQ 共享组件
+      uv_env: envs/video-minimax-h3
+
+    # ----- 2. SDNQ 4bit Ref2VA（方案 A/B/C 用） -----
+    - name: MiniMax/H3-Ref2VA-SDNQ
+      alias: H3-Ref2VA-4bit
+      base_model: Ref2VA
+      precision: sdnq_uint4
+      loader: minimax
+      vram_required: 24GB
+      path: video/minimax-h3/sdnq_format/transformer_ref
+      schemes: [A, B, C, T4]   # v0.7+ 新增 T4（官方 ref2v turbo 仅 4 步版，无 8 步 LoRA）
+      model_file_ids:
+        - h3-sdnq-ref2va-transformer
+        - h3-sdnq-shared-components
+      uv_env: envs/video-minimax-h3
+
+    # ----- 3. BF16 原版 FL2VA（方案 D 用，最高质量） -----
+    - name: MiniMax/H3-FL2VA
+      alias: H3-FL2VA-BF16
+      base_model: FL2VA
+      precision: bf16
+      loader: minimax
+      vram_required: 48GB+  # BF16 原版需 80GB+ 显存才能流畅运行
+      path: video/minimax-h3/diffusers_format/transformer
+      schemes: [D]
+      model_file_ids:
+        - h3-fl2va-transformer              # BF16 FL2VA transformer（marker 整仓下载）
+        - h3-shared-components               # BF16 共享组件
+      uv_env: envs/video-minimax-h3
+
+    # ----- 4. BF16 原版 Ref2VA（方案 D 用） -----
+    - name: MiniMax/H3-Ref2VA
+      alias: H3-Ref2VA-BF16
+      base_model: Ref2VA
+      precision: bf16
+      loader: minimax
+      vram_required: 48GB+
+      path: video/minimax-h3/diffusers_format/transformer_ref
+      schemes: [D]
+      model_file_ids:
+        - h3-ref2va-transformer
+        - h3-shared-components
+      uv_env: envs/video-minimax-h3
+
+  # ===== 方案列表（v0.6+ 新增，与 schemes/ 目录对应）=====
+  # 每个方案对应一个 schemes/scheme_X.yaml 文件
+  # 方案与 variant 通过 variants[].schemes 字段双向关联
+  schemes:
+    - id: A
+      name: 24G 显存流畅版
+      description: RTX 3090/4090/5090，5秒768p约1-2min，质量接近原版
+      vram_required: 24GB
+      precision: sdnq_uint4
+      model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      model_subdir: video/minimax-h3/sdnq_format
+    - id: B
+      name: 12-16G 显存可用版
+      description: RTX 3060 12G / 4060 Ti 16G，5秒480p约3-5min，质量略有损失
+      vram_required: 12GB
+      precision: sdnq_uint4
+      model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      model_subdir: video/minimax-h3/sdnq_format
+    - id: C
+      name: 8G 显存 + 16G 内存极低配版
+      description: RTX 3060 Ti 8G + 16G 内存，5秒480p约10-15min，质量损失明显但可用
+      vram_required: 8GB
+      precision: sdnq_uint4
+      model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      model_subdir: video/minimax-h3/sdnq_format
+    - id: D
+      name: BF16 原精度版（最高质量）
+      description: A100/H100 80GB 或 RTX 6000 Ada 48GB+，5秒768p约4min，最高质量
+      vram_required: 48GB+
+      precision: bf16
+      model_repo: MiniMaxAI/MiniMax-H3
+      model_subdir: video/minimax-h3/diffusers_format
+    - id: T8
+      name: Turbo 8 步加速版（fp16 激活，Turing 适配）
+      description: "[L2策略] 官方 Lightning turbo LoRA 蒸馏，8 步生成（基线 20-30 步提速约 3 倍）。fp16 激活适配无 BF16 Tensor Core 的 GPU（Turing sm_75）。音频和动态质量略有下降（蒸馏代价）。仅 FL2VA"
+      vram_required: 24GB
+      precision: sdnq_uint4_fp16
+      model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      model_subdir: video/minimax-h3/sdnq_format
+    - id: T4
+      name: Turbo 4 步极速版（fp16 激活，Turing 适配）
+      description: "[L2策略] 官方 turbo LoRA 蒸馏，4 步生成（提速约 5-6 倍）。FL2VA 用 768p 优化 4 步 LoRA，Ref2VA 用 ref2v 专用 4 步 LoRA（自动范式感知）。音频和动态质量略降。适合快速预览"
+      vram_required: 24GB
+      precision: sdnq_uint4_fp16
+      model_repo: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      model_subdir: video/minimax-h3/sdnq_format
+
+  # ===== 模型文件清单（v0.6+ 双套：SDNQ 4bit + BF16 原版）=====
+  # SDNQ 4bit 系列（方案 A/B/C 用，~75GB）：
+  #   - 来源仓库：OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+  #   - exclusive_group: minimax-h3-transformer-sdnq（SDNQ 内部互斥）
+  # BF16 原版系列（方案 D 用，~134GB）：
+  #   - 来源仓库：MiniMaxAI/MiniMax-H3
+  #   - exclusive_group: minimax-h3-transformer-bf16（BF16 内部互斥）
+  # 两套之间通过 exclusive_group 区分，用户可按需选择下载 SDNQ 或 BF16
+  model_files:
+    # ============================================================
+    # SDNQ 4bit 系列（方案 A/B/C 用）
+    # ============================================================
+
+    # ----- SDNQ FL2VA transformer（整仓 marker） -----
+    - id: h3-sdnq-fl2va-transformer
+      role: main
+      filename: transformer/
+      target_dir: video/minimax-h3/sdnq_format
+      format: marker
+      exclusive_group: minimax-h3-transformer-sdnq  # SDNQ 内部互斥（FL2VA / Ref2VA 二选一）
+      required_for: [MiniMax/H3-FL2VA-SDNQ]
+      source:
+          type: huggingface
+          repo_id: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+          subdir: transformer
+          url: https://huggingface.co/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit/tree/main/transformer
+          mirror_url: https://hf-mirror.com/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit/tree/main/transformer
+      # key_files 按 OzzyGT/MiniMax_H3_sdnq_dynamic_4bit 仓库真实文件列表声明
+      # 仓库实际结构（2026-08-11 核对）：
+      #   - transformer/diffusion_pytorch_model-00001-of-00002.safetensors（~37GB）
+      #   - transformer/diffusion_pytorch_model-00002-of-00002.safetensors（~37GB）
+      #   - transformer/diffusion_pytorch_model.safetensors.index.json（分片索引）
+      #   - transformer/config.json
+      # 注意：SDNQ 量化后权重是 2 个分片，不是原版 BF16 的 14 个分片，也不是单文件
+      key_files:
+        - transformer/config.json
+        - transformer/diffusion_pytorch_model-00001-of-00002.safetensors
+        - transformer/diffusion_pytorch_model-00002-of-00002.safetensors
+        - transformer/diffusion_pytorch_model.safetensors.index.json
+      description: "MiniMax-H3 SDNQ 4bit FL2VA transformer（量化版，方案 A/B/C 用）"
+
+    # ----- SDNQ Ref2VA transformer（整仓 marker） -----
+    - id: h3-sdnq-ref2va-transformer
+      role: main
+      filename: transformer_ref/
+      target_dir: video/minimax-h3/sdnq_format
+      format: marker
+      exclusive_group: minimax-h3-transformer-sdnq  # SDNQ 内部互斥
+      required_for: [MiniMax/H3-Ref2VA-SDNQ]
+      source:
+          type: huggingface
+          repo_id: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+          subdir: transformer_ref
+          url: https://huggingface.co/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit/tree/main/transformer_ref
+          mirror_url: https://hf-mirror.com/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit/tree/main/transformer_ref
+      # key_files 按 OzzyGT/MiniMax_H3_sdnq_dynamic_4bit 仓库真实文件列表声明
+      # 仓库实际结构（2026-08-11 核对）：
+      #   - transformer_ref/diffusion_pytorch_model-00001-of-00002.safetensors（~37GB）
+      #   - transformer_ref/diffusion_pytorch_model-00002-of-00002.safetensors（~37GB）
+      #   - transformer_ref/diffusion_pytorch_model.safetensors.index.json（分片索引）
+      #   - transformer_ref/config.json
+      # 注意：SDNQ 量化后权重是 2 个分片，不是原版 BF16 的 14 个分片，也不是单文件
+      key_files:
+        - transformer_ref/config.json
+        - transformer_ref/diffusion_pytorch_model-00001-of-00002.safetensors
+        - transformer_ref/diffusion_pytorch_model-00002-of-00002.safetensors
+        - transformer_ref/diffusion_pytorch_model.safetensors.index.json
+      description: "MiniMax-H3 SDNQ 4bit Ref2VA transformer（量化版，方案 A/B/C 用）"
+
+    # ----- SDNQ 共享组件（text_encoder / vae / audio_vae / scheduler / processor / tokenizer） -----
+    - id: h3-sdnq-shared-components
+      role: main
+      filename: modular_model_index.json  # 标志文件（SDNQ 仓库无 model_index.json，用 modular_model_index.json）
+      target_dir: video/minimax-h3/sdnq_format
+      format: marker
+      required_for: [MiniMax/H3-FL2VA-SDNQ, MiniMax/H3-Ref2VA-SDNQ]  # 跨 SDNQ variant 共享
+      source:
+          type: huggingface
+          repo_id: OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+          url: https://huggingface.co/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+          mirror_url: https://hf-mirror.com/OzzyGT/MiniMax_H3_sdnq_dynamic_4bit
+      # key_files 按 OzzyGT/MiniMax_H3_sdnq_dynamic_4bit 仓库真实文件列表声明
+      # 仓库实际结构（2026-08-11 核对，共 21 个文件）：
+      #   - 索引：modular_model_index.json（无 model_index.json，SDNQ 用 ModularPipeline）
+      #   - text_encoder/：config.json + generation_config.json + model.safetensors（单文件，量化后无需分片）
+      #   - tokenizer/：merges.txt + tokenizer.json + tokenizer_config.json + vocab.json（独立目录，非 text_encoder 子目录）
+      #   - processor/：chat_template.json + merges.txt + preprocessor_config.json + tokenizer.json
+      #                + tokenizer_config.json + video_preprocessor_config.json + vocab.json（独立目录）
+      #   - vae/：config.json + diffusion_pytorch_model.safetensors（单文件，量化后无需分片）
+      #   - audio_vae/：config.json + diffusion_pytorch_model.safetensors
+      #   - scheduler/：scheduler_config.json
+      #   - audio_scheduler/：scheduler_config.json
+      # 修正记录（v1.1）：
+      #   - 删除 model_index.json（仓库无此文件）
+      #   - 删除 text_encoder/model.safetensors.index.json（量化后是单文件，无分片索引）
+      #   - 删除 text_encoder/tokenizer.json 等 7 个错误路径（实际在 tokenizer/ 或 processor/ 目录）
+      #   - 删除 vae/diffusion_pytorch_model.safetensors.index.json（量化后是单文件，无分片索引）
+      #   - 新增 text_encoder/generation_config.json（原版有此文件，之前漏声明）
+      #   - 删除 7 个重复声明（processor/ 和 tokenizer/ 下的文件之前在 text_encoder/ 也声明了一次）
+      key_files:
+        # 索引文件
+        - modular_model_index.json
+        # text_encoder（量化后是单文件 model.safetensors，无分片索引）
+        - text_encoder/config.json
+        - text_encoder/generation_config.json
+        - text_encoder/model.safetensors
+        # tokenizer（独立目录，非 text_encoder 子目录）
+        - tokenizer/merges.txt
+        - tokenizer/tokenizer.json
+        - tokenizer/tokenizer_config.json
+        - tokenizer/vocab.json
+        # processor（独立目录）
+        - processor/chat_template.json
+        - processor/merges.txt
+        - processor/preprocessor_config.json
+        - processor/tokenizer.json
+        - processor/tokenizer_config.json
+        - processor/video_preprocessor_config.json
+        - processor/vocab.json
+        # vae（量化后是单文件，无分片索引）
+        - vae/config.json
+        - vae/diffusion_pytorch_model.safetensors
+        # audio_vae
+        - audio_vae/config.json
+        - audio_vae/diffusion_pytorch_model.safetensors
+        # 调度器
+        - scheduler/scheduler_config.json
+        - audio_scheduler/scheduler_config.json
+      description: "MiniMax-H3 SDNQ 4bit 共享组件（text_encoder / vae / audio_vae / scheduler / processor / tokenizer，方案 A/B/C 用）"
+
+    # ============================================================
+    # BF16 原版系列（方案 D 用）
+    # ============================================================
+
+    # ----- BF16 FL2VA transformer（整仓 marker） -----
+    - id: h3-fl2va-transformer
+      role: main
+      filename: transformer/
+      target_dir: video/minimax-h3/diffusers_format
+      format: marker
+      exclusive_group: minimax-h3-transformer-bf16  # v0.6+ BF16 内部互斥（FL2VA / Ref2VA 二选一）
+      required_for: [MiniMax/H3-FL2VA]
+      source:
+          type: huggingface
+          repo_id: MiniMaxAI/MiniMax-H3
+          subdir: transformer
+          url: https://huggingface.co/MiniMaxAI/MiniMax-H3/tree/main/transformer
+          mirror_url: https://hf-mirror.com/MiniMaxAI/MiniMax-H3/tree/main/transformer
+      key_files:
+        - transformer/config.json
+        - transformer/diffusion_pytorch_model-00001-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00002-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00003-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00004-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00005-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00006-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00007-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00008-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00009-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00010-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00011-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00012-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00013-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00014-of-00014.safetensors
+        - transformer/diffusion_pytorch_model.safetensors.index.json
+      description: "MiniMax-H3 BF16 FL2VA transformer（原版，方案 D 用）"
+
+    # ----- BF16 Ref2VA transformer（整仓 marker） -----
+    - id: h3-ref2va-transformer
+      role: main
+      filename: transformer_ref/
+      target_dir: video/minimax-h3/diffusers_format
+      format: marker
+      exclusive_group: minimax-h3-transformer-bf16  # v0.6+ BF16 内部互斥
+      required_for: [MiniMax/H3-Ref2VA]
+      source:
+          type: huggingface
+          repo_id: MiniMaxAI/MiniMax-H3
+          subdir: transformer_ref
+          url: https://huggingface.co/MiniMaxAI/MiniMax-H3/tree/main/transformer_ref
+          mirror_url: https://hf-mirror.com/MiniMaxAI/MiniMax-H3/tree/main/transformer_ref
+      key_files:
+        - transformer_ref/config.json
+        - transformer_ref/diffusion_pytorch_model-00001-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00002-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00003-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00004-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00005-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00006-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00007-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00008-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00009-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00010-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00011-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00012-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00013-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model-00014-of-00014.safetensors
+        - transformer_ref/diffusion_pytorch_model.safetensors.index.json
+      description: "MiniMax-H3 BF16 Ref2VA transformer（原版，方案 D 用）"
+
+    # ----- BF16 共享组件（text_encoder / vae / audio_vae / scheduler / processor / tokenizer） -----
+    - id: h3-shared-components
+      role: main
+      filename: model_index.json
+      target_dir: video/minimax-h3/diffusers_format
+      format: marker
+      required_for: [MiniMax/H3-FL2VA, MiniMax/H3-Ref2VA]  # 跨 BF16 variant 共享
+      source:
+          type: huggingface
+          repo_id: MiniMaxAI/MiniMax-H3
+          url: https://huggingface.co/MiniMaxAI/MiniMax-H3
+          mirror_url: https://hf-mirror.com/MiniMaxAI/MiniMax-H3
+      key_files:
+        - model_index.json
+        - modular_model_index.json
+        - text_encoder/chat_template.json
+        - text_encoder/config.json
+        - text_encoder/merges.txt
+        - text_encoder/model-00001-of-00014.safetensors
+        - text_encoder/model-00002-of-00014.safetensors
+        - text_encoder/model-00003-of-00014.safetensors
+        - text_encoder/model-00004-of-00014.safetensors
+        - text_encoder/model-00005-of-00014.safetensors
+        - text_encoder/model-00006-of-00014.safetensors
+        - text_encoder/model-00007-of-00014.safetensors
+        - text_encoder/model-00008-of-00014.safetensors
+        - text_encoder/model-00009-of-00014.safetensors
+        - text_encoder/model-00010-of-00014.safetensors
+        - text_encoder/model-00011-of-00014.safetensors
+        - text_encoder/model-00012-of-00014.safetensors
+        - text_encoder/model-00013-of-00014.safetensors
+        - text_encoder/model-00014-of-00014.safetensors
+        - text_encoder/model.safetensors.index.json
+        - text_encoder/preprocessor_config.json
+        - text_encoder/tokenizer.json
+        - text_encoder/tokenizer_config.json
+        - text_encoder/video_preprocessor_config.json
+        - text_encoder/vocab.json
+        - vae/config.json
+        - vae/diffusion_pytorch_model-00001-of-00003.safetensors
+        - vae/diffusion_pytorch_model-00002-of-00003.safetensors
+        - vae/diffusion_pytorch_model-00003-of-00003.safetensors
+        - vae/diffusion_pytorch_model.safetensors.index.json
+        - audio_vae/config.json
+        - audio_vae/diffusion_pytorch_model.safetensors
+        - scheduler/scheduler_config.json
+        - audio_scheduler/scheduler_config.json
+        - processor/chat_template.json
+        - processor/merges.txt
+        - processor/preprocessor_config.json
+        - processor/tokenizer.json
+        - processor/tokenizer_config.json
+        - processor/video_preprocessor_config.json
+        - processor/vocab.json
+        - tokenizer/merges.txt
+        - tokenizer/tokenizer.json
+        - tokenizer/tokenizer_config.json
+        - tokenizer/vocab.json
+      description: "MiniMax-H3 BF16 共享组件（text_encoder / vae / audio_vae / scheduler / processor / tokenizer，方案 D 用）"
+
+    # ============================================================
+    # 官方 Turbo LoRA 系列（v0.7+ 方案 T8/T4 用，可选下载）
+    # ============================================================
+    # 注意：均为可选文件（无 required_for）——仅选择 T8/T4 turbo 方案时需要，
+    #       未选 turbo 方案时不强制下载。ComfyUI 单文件格式，由引擎
+    #       accelerators/lora_loader.py 旁路 adapter 方式注入（key 映射见该文件头注释）。
+
+    # ----- FL2VA 8 步 turbo LoRA（方案 T8 用，官方 Comfy 文档 turbo_mode 默认档） -----
+    - id: h3-turbo-lora-fl2v-8step
+      role: lora
+      filename: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      target_dir: video/minimax-h3/loras
+      format: safetensors
+      # 可选下载：仅 T8 方案需要（FL2VA 范式）
+      source:
+          type: huggingface
+          repo_id: lightx2v/Minimax-h3-Turbo
+          url: https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+          mirror_url: https://hf-mirror.com/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      description: "官方 Lightning turbo LoRA（FL2VA 8 步蒸馏，v1.0，~1.8GB，方案 T8 用）"
+
+    # ----- FL2VA 4 步 turbo LoRA（方案 T4 用，768p 优化版） -----
+    - id: h3-turbo-lora-fl2v-4step
+      role: lora
+      filename: minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors
+      target_dir: video/minimax-h3/loras
+      format: safetensors
+      # 可选下载：仅 T4 方案 + FL2VA 范式需要
+      source:
+          type: huggingface
+          repo_id: Comfy-Org/MiniMax-H3
+          subdir: loras
+          url: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors
+          mirror_url: https://hf-mirror.com/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors
+      description: "官方 turbo LoRA（FL2VA 4 步蒸馏，v1.0 768p 优化，方案 T4 用）"
+
+    # ----- Ref2VA 4 步 turbo LoRA（方案 T4 + Ref2VA 范式用） -----
+    - id: h3-turbo-lora-ref2v-4step
+      role: lora
+      filename: minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+      target_dir: video/minimax-h3/loras
+      format: safetensors
+      # 可选下载：仅 T4 方案 + Ref2VA 范式需要
+      source:
+          type: huggingface
+          repo_id: Comfy-Org/MiniMax-H3
+          subdir: loras
+          url: https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+          mirror_url: https://hf-mirror.com/Comfy-Org/MiniMax-H3/resolve/main/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+      description: "官方 turbo LoRA（Ref2VA 4 步蒸馏，v0.1，方案 T4 + Ref2VA 范式用）"
+
+  # ===== LoRA 扫描配置 =====
+  # v0.6+ 双 LoRA 目录：
+  #   - sdnq_format/loras/：加速 LoRA（LightX2V Turbo，方案 A/B/C 自动加载）
+  #   - diffusers_format/loras/：用户 LoRA（运行时动态切换）
+  loras:
+    scan_dir: video/minimax-h3/sdnq_format/loras/
+    format: safetensors
+    runtime_switch: true

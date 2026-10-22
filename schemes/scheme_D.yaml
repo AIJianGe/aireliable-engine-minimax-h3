@@ -1,0 +1,68 @@
+# ============================================================
+# 方案 D：BF16 原精度版（最高质量，v2.0 新增）
+# ------------------------------------------------------------
+# 目标硬件：A100/H100 80GB 或 RTX 6000 Ada 48GB+
+# 模型来源：MiniMaxAI/MiniMax-H3（官方 BF16 原版，~134GB）
+# 性能预期：5 秒 768p 视频 ~4 分钟，最高质量
+#
+# 加速组合：TE-Speed 块级缓存（v0.7.7+）
+#   - 不启用 SageAttention（保证精度）
+#   - 不使用 LightX2V LoRA（原生 30 步）
+#   - 不启用 FirstBlockCache（每步都执行）
+#   - TE-Speed（sigma 差先验 + 尾部块跳过）：30 步 sigma 差 ≈0.033 < 0.12 高命中 ~45% 加速，质量无损
+#   - 不启用 BlockSwap（显存充足）
+#   - 不启用 VAE tiling
+# ============================================================
+scheme: D
+name: BF16 原精度版（最高质量）
+description: "[L0策略] A100/H100 80GB或RTX 6000 Ada 48GB+，5秒768p约4min。全GPU不卸载，VRAM 48GB，RAM 0GB，适合80GB+显存"
+vram_required: 48GB+
+
+# 模型来源（BF16 原版）
+model_repo: MiniMaxAI/MiniMax-H3
+model_subdir: diffusers_format
+precision: bf16
+size_gb: 134
+
+# 加载策略
+offload_level: L0  # 全 GPU，不卸载
+device: cuda:0
+
+# 不启用低精度加速（保真），仅开 TE-Speed 块级缓存（sigma 差先验，非量化无损）
+acceleration:
+  sage_attention:
+    enabled: false
+  lora:
+    enabled: false
+  first_block_cache:
+    enabled: false
+  te_speed_cache:
+    enabled: true                  # v0.7.7+ T3.2：30 步 sigma 差 ≈0.033 < 0.12，尾部块高命中 ~45% 加速（官方默认，质量无损）
+    control_value: 0.12
+    percent_1: 0.1
+    percent_2: 0.9
+    start_block_ratio: 0.5
+    device: cuda
+
+# 显存优化（显存充足，不启用）
+block_swap:
+  enabled: false
+vae_tiling:
+  enabled: false
+
+# 推理参数（原生 30 步）
+inference:
+  num_inference_steps: 30
+  scheduler: simple
+  sampler: euler
+  guidance_scale: 7.0
+  flow_shift: 12.0            # 与模型 checkpoint 默认一致（视频 shift=12）
+  audio_flow_shift: 3.0       # 与模型 checkpoint 默认一致（音频 shift=3）
+  default_resolution: 1344x768
+  default_fps: 24
+  default_duration: 5
+
+# 适用 variant（BF16 原版变体）
+applicable_variants:
+  - MiniMax/H3-FL2VA
+  - MiniMax/H3-Ref2VA

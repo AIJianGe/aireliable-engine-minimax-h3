@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniMax-H3 视频生成引擎</title>
+<link rel="stylesheet" href="style.css?v=4">
+</head>
+<body>
+<header class="topbar">
+  <h1>MiniMax-H3 <span class="sub">视频生成引擎</span></h1>
+  <div class="engine-state">
+    <span id="state-badge" class="badge">未连接</span>
+    <span id="state-detail" class="state-detail">—</span>
+    <button id="btn-refresh-status" class="btn btn-ghost" title="刷新引擎状态">刷新</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============ 左列：设置区 + 参数区 ============ -->
+  <div class="left-col">
+
+    <!-- ◆ 设置区 -->
+    <section class="panel panel-settings" id="panel-settings">
+      <h2>⚙ 设置</h2>
+
+      <div class="field-row">
+        <label>生成模式</label>
+        <div class="seg" id="mode-seg">
+          <button class="seg-btn active" data-mode="t2v" title="文生视频">T2V</button>
+          <button class="seg-btn" data-mode="i2v" title="图生视频（首帧/尾帧）">I2V</button>
+          <button class="seg-btn" data-mode="fl2v" title="首尾帧生视频">首尾帧</button>
+          <button class="seg-btn" data-mode="ref2v" title="多宫格参考图（≤9 张）">多宫格</button>
+          <button class="seg-btn" data-mode="ref2va" title="多模态参考：图（≤9）/视频（≤3）/音频（≤3）混合参考，按组合自动判定场景（对口型/音色/动作参考）">多模态</button>
+          <button class="seg-btn" data-mode="video_edit" title="源视频 + 编辑指令">视频编辑</button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label>加载方案</label>
+        <button id="btn-help-scheme" class="help-btn" title="方案参数说明（什么方案用什么参数）">?</button>
+        <select id="scheme-select">
+          <option value="">（获取中…）</option>
+        </select>
+        <button id="btn-scheme-save" class="btn btn-secondary" title="保存当前方案为默认">存默认</button>
+      </div>
+      <div class="hint" id="scheme-desc">—</div>
+
+      <div class="field-row" style="margin-top:10px">
+        <label>模型变体</label>
+        <select id="variant-select">
+          <option value="">（获取中…）</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label>CPU Offload</label>
+        <select id="offload-select">
+          <option value="auto">auto（自动）</option>
+          <option value="L0">L0 - 全 GPU（≥80GB）</option>
+          <option value="L1">L1 - TE 卸载（≥48GB）</option>
+          <option value="L2">L2 - 层级别（≥24GB）</option>
+          <option value="L3">L3 - 激进（&lt;24GB）</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label>&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button id="btn-load" class="btn btn-secondary">加载模型</button>
+          <button id="btn-unload" class="btn btn-danger">卸载模型</button>
+        </div>
+      </div>
+      <div class="hint" id="mode-hint">
+        T2V 文生视频：仅根据文本描述生成视频（FL2VA 范式，含原生音频）
+      </div>
+    </section>
+
+    <!-- ◆ 参数区 -->
+    <section class="panel panel-params" id="panel-params">
+      <h2>🎛 参数</h2>
+
+      <!-- I2V 模式专属：单图 + 角色 -->
+      <div class="field mode-field" id="i2v-field" style="display:none">
+        <label>输入图片 <span class="req">（I2V 模式必填）</span></label>
+        <div class="dropzone dropzone-mini" id="i2v-dropzone">
+          <input type="file" id="i2v-file-input" accept="image/*" hidden>
+          <p>🖼 上传图片（点击 / 拖拽）</p>
+        </div>
+        <div id="i2v-chip-box"></div>
+        <div class="field-row" style="margin-top:8px">
+          <label>图片角色</label>
+          <div class="seg" id="i2v-role-seg">
+            <button class="seg-btn active" data-role="first_frame">首帧</button>
+            <button class="seg-btn" data-role="last_frame">尾帧</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FL2V 模式专属：首帧 + 尾帧 -->
+      <div class="field mode-field" id="fl2v-field" style="display:none">
+        <label>首尾帧图片 <span class="req">（首尾帧模式必填，2 张）</span></label>
+        <div class="fl2v-grid">
+          <div>
+            <div class="dropzone dropzone-mini" id="fl2v-first-dropzone">
+              <input type="file" id="fl2v-first-input" accept="image/*" hidden>
+              <p>⏮ 首帧图片</p>
+            </div>
+            <div id="fl2v-first-chip-box"></div>
+          </div>
+          <div>
+            <div class="dropzone dropzone-mini" id="fl2v-last-dropzone">
+              <input type="file" id="fl2v-last-input" accept="image/*" hidden>
+              <p>⏭ 尾帧图片</p>
+            </div>
+            <div id="fl2v-last-chip-box"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ref2V 模式专属：多宫格参考图（≤9） -->
+      <div class="field mode-field" id="ref2v-field" style="display:none">
+        <label>参考图片 <span class="req">（多宫格模式必填，最多 9 张）</span></label>
+        <div class="dropzone dropzone-mini" id="ref2v-dropzone">
+          <input type="file" id="ref2v-file-input" accept="image/*" multiple hidden>
+          <p>🧩 上传参考图（可多选，按顺序作为 &lt;Subject N&gt;）</p>
+        </div>
+        <div id="ref2v-chip-box" class="ref2v-chips"></div>
+        <div class="hint">提示词中可用 &lt;Subject 1&gt;、&lt;Subject 2&gt; … 引用第 N 张图片</div>
+      </div>
+
+      <!-- Ref2VA 多模态参考模式专属：图/视频/音频三上传区 + 场景自动判定 -->
+      <div class="field mode-field" id="ref2va-field" style="display:none">
+        <div class="ref2va-zone">
+          <label>参考图片 <span class="zone-count" id="ref2va-img-count">0/9</span></label>
+          <div class="dropzone dropzone-mini" id="ref2va-img-dropzone">
+            <input type="file" id="ref2va-img-input" accept="image/*" multiple hidden>
+            <p>🖼 上传参考图（≤9，按顺序作为 &lt;Picture N&gt;）</p>
+          </div>
+          <div id="ref2va-img-chip-box" class="ref2v-chips"></div>
+        </div>
+        <div class="ref2va-zone">
+          <label>参考视频 <span class="zone-count" id="ref2va-vid-count">0/3</span></label>
+          <div class="dropzone dropzone-mini" id="ref2va-vid-dropzone">
+            <input type="file" id="ref2va-vid-input" accept="video/*" multiple hidden>
+            <p>🎬 上传参考视频（≤3，保留帧率与音轨，作为 &lt;Video N&gt;）</p>
+          </div>
+          <div id="ref2va-vid-chip-box" class="ref2v-chips"></div>
+        </div>
+        <div class="ref2va-zone">
+          <label>参考音频 <span class="zone-count" id="ref2va-aud-count">0/3</span> <span class="req">（不能单独使用，需配对图/视频）</span></label>
+          <div class="dropzone dropzone-mini" id="ref2va-aud-dropzone">
+            <input type="file" id="ref2va-aud-input" accept="audio/*" multiple hidden>
+            <p>🎵 上传参考音频（≤3，提供说话内容与音色，作为 &lt;Audio N&gt;）</p>
+          </div>
+          <div id="ref2va-aud-chip-box" class="ref2v-chips"></div>
+        </div>
+        <div class="scene-hint" id="ref2va-scene-hint" style="display:none"></div>
+        <div class="field-row" style="margin-top:8px">
+          <button id="btn-lipsync-tpl" class="btn btn-secondary" title="对口型场景一键提示词模板（图 + 音频）">🎤 对口型提示词模板</button>
+        </div>
+        <div class="hint">按上传组合自动判定场景；参考顺序：图 → 视频 → 音频（不同顺序 = 不同请求）</div>
+      </div>
+
+      <!-- 视频编辑模式专属：源视频 -->
+      <div class="field mode-field" id="edit-field" style="display:none">
+        <label>源视频 <span class="req">（视频编辑模式必填）</span></label>
+        <div class="dropzone dropzone-mini" id="edit-dropzone">
+          <input type="file" id="edit-file-input" accept="video/*" hidden>
+          <p>🎬 上传待编辑的视频（点击 / 拖拽）</p>
+        </div>
+        <div id="edit-chip-box"></div>
+        <div class="hint">支持 &lt;Video N&gt; / &lt;Audio N&gt; 标签引用源视频内容（Ref2VA 范式）</div>
+      </div>
+
+      <div class="field">
+        <label for="prompt-input" id="prompt-label">正向提示词 <span class="req">（必填）</span></label>
+        <textarea id="prompt-input" rows="3" placeholder="如：一只金毛犬在海边奔跑，夕阳西下，电影级运镜…"></textarea>
+      </div>
+      <div class="field">
+        <label for="negative-input">负向提示词（可选）</label>
+        <input type="text" id="negative-input" placeholder="如：模糊、低质量、变形、水印…">
+      </div>
+
+      <!-- 视频参数（网格布局） -->
+      <div class="adv-grid">
+        <div class="field">
+          <label for="duration-range">视频时长 <span class="val" id="duration-val">5s</span></label>
+          <input type="range" id="duration-range" min="1" max="15" step="1" value="5">
+          <span class="hint">最长 15 秒</span>
+        </div>
+        <div class="field">
+          <label for="fps-range">帧率 <span class="val" id="fps-val">24</span></label>
+          <input type="range" id="fps-range" min="8" max="30" step="1" value="24">
+        </div>
+        <div class="field">
+          <label for="resolution-select">分辨率</label>
+          <select id="resolution-select">
+            <option value="608x352">608x352（0.2MP 最低）</option>
+            <option value="736x416">736x416（0.3MP）</option>
+            <option value="864x480" selected>864x480（0.4MP 官方默认）</option>
+            <option value="960x544">960x544（0.5MP）</option>
+            <option value="1056x608">1056x608（0.6MP）</option>
+            <option value="1216x672">1216x672（0.8MP）</option>
+            <option value="1344x768">1344x768（0.98MP 高清）</option>
+            <option value="352x608">352x608（9:16 0.2MP）</option>
+            <option value="416x736">416x736（9:16 0.3MP）</option>
+            <option value="480x864">480x864（9:16 0.4MP）</option>
+            <option value="544x960">544x960（9:16 0.5MP）</option>
+            <option value="608x1056">608x1056（9:16 0.6MP）</option>
+            <option value="672x1216">672x1216（9:16 0.8MP）</option>
+            <option value="768x1344">768x1344（9:16 0.98MP 高清）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="steps-range">推理步数 <span class="val" id="steps-val">30</span>
+            <button id="btn-help-steps" class="btn-steps-ref" title="各生成方式推荐步数参考表（据实测 + 网上建议，仅参考，手动改滑块优先）">推荐参考表</button>
+          </label>
+          <input type="range" id="steps-range" min="1" max="200" step="1" value="30">
+          <span class="hint">方案 T4 → 4 步 | T8/B/C → 8 步 | A/D → 30 步</span>
+        </div>
+        <div class="field">
+          <label for="guidance-range">CFG 引导 <span class="val" id="guidance-val">7.0</span></label>
+          <input type="range" id="guidance-range" min="0" max="20" step="0.5" value="7">
+        </div>
+        <div class="field">
+          <label for="seed-input">随机种子</label>
+          <input type="number" id="seed-input" value="-1" min="-1" title="-1 = 随机">
+        </div>
+      </div>
+
+      <!-- 高级设置：加速方案 + LoRA（对应 Gradio 高级设置弹窗） -->
+      <details class="advanced">
+        <summary>▸ 高级设置（加速方案 / LoRA 管理）<button id="btn-help-advanced" class="help-btn help-btn-sm" title="加速选项参数说明">?</button></summary>
+        <div class="field" style="margin-top:10px">
+          <span class="hint" style="margin:0 0 6px">
+            加速方案在模型加载时注入，修改后需点击「应用并重载模型」生效。
+            SageAttention 1.5-2× | LightX2V LoRA 6-12× | FirstBlockCache 1.5× | BlockSwap（方案 C）
+          </span>
+          <div class="accel-row">
+            <label class="chk"><input type="checkbox" id="adv-sage"> SageAttention</label>
+            <label class="chk"><input type="checkbox" id="adv-lora"> LightX2V LoRA</label>
+            <label class="chk"><input type="checkbox" id="adv-fbc"> FirstBlockCache</label>
+            <label class="chk"><input type="checkbox" id="adv-blockswap"> BlockSwap</label>
+          </div>
+          <div class="field-row" style="margin-top:8px">
+            <label>LoRA 权重</label>
+            <input type="range" id="adv-lora-scale" min="0" max="2" step="0.1" value="1" style="flex:1">
+            <span class="val" id="adv-lora-scale-val">1.0</span>
+          </div>
+          <div class="field-row">
+            <label>&nbsp;</label>
+            <button id="btn-apply-accel" class="btn btn-secondary">应用并重载模型</button>
+            <span class="hint" id="accel-status" style="margin:0">—</span>
+          </div>
+        </div>
+
+        <div class="field" style="border-top:1px dashed var(--border);padding-top:10px;margin-top:10px">
+          <label>LoRA 管理</label>
+          <div class="field-row">
+            <select id="lora-select" style="flex:1">
+              <option value="">（无可用 LoRA）</option>
+            </select>
+            <input type="range" id="lora-weight" min="0" max="2" step="0.1" value="1" style="width:100px" title="LoRA 权重">
+            <span class="val" id="lora-weight-val">1.0</span>
+          </div>
+          <div class="field-row">
+            <label>&nbsp;</label>
+            <button id="btn-lora-load" class="btn btn-secondary">加载 LoRA</button>
+            <button id="btn-lora-unload" class="btn btn-danger">卸载 LoRA</button>
+            <span class="hint" id="lora-status" style="margin:0">—</span>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <!-- ============ 右列：结果区 ============ -->
+  <div class="right-col">
+
+    <!-- ◆ 结果区 -->
+    <section class="panel panel-result" id="panel-result">
+      <h2>🎬 生成结果</h2>
+
+      <div class="gen-bar">
+        <button id="btn-generate" class="btn btn-primary btn-large">生成视频</button>
+        <div class="progress-wrap" id="progress-wrap" style="display:none">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <span class="progress-text" id="progress-text">准备中…</span>
+        </div>
+      </div>
+
+      <div class="error-box" id="error-box" style="display:none">
+        <button class="err-close" onclick="this.parentElement.style.display='none'">×</button>
+        <pre id="error-text"></pre>
+      </div>
+
+      <div class="result-view result-view-video" id="result-view">
+        <p class="placeholder">生成的视频将显示在这里</p>
+      </div>
+
+      <div class="result-meta" id="result-meta"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  MiniMax-H3 Video Engine · 引擎直连模式（/ui → 7006） · <span id="footer-mode"></span>
+</footer>
+
+<!-- 帮助弹窗（模态框）：仅通过按钮关闭，点击遮罩不关闭 -->
+<div class="modal-overlay" id="help-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="help-modal-title">帮助</h3>
+      <button class="modal-close" id="btn-help-close" title="关闭">×</button>
+    </div>
+    <div class="modal-body" id="help-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-help-done">我知道了</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=4"></script>
+</body>
+</html>
