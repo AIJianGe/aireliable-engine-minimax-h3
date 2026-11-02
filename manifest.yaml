@@ -54,7 +54,7 @@
 # ===== v0.1 必需字段 =====
 engine_id: minimax_h3_video_a1b2c3
 engine_name: MiniMax-H3 Video
-engine_version: 0.6.0
+engine_version: 1.0.0
 aireliable_compat: ">=0.0.16"
 uv_env_name: video-minimax-h3
 export_mode: source
@@ -94,8 +94,8 @@ source:
 
 # 升级信息
 upgrade:
-  check_url: https://api.github.com/repos/MiniMax-AI/MiniMax-H3/releases/latest
-  auto_check: false
+  check_url: https://api.github.com/repos/AIJianGe/aireliable-engine-minimax-h3/releases/latest
+  auto_check: true
 
 # 节点包依赖（integrated 范式不依赖节点包）
 node_packages: []
@@ -556,6 +556,7 @@ models:
 
     # ----- FL2VA 8 步 turbo LoRA（方案 T8 用，官方 Comfy 文档 turbo_mode 默认档） -----
     - id: h3-turbo-lora-fl2v-8step
+      size_bytes: 1956193000
       role: lora
       filename: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
       target_dir: video/minimax-h3/loras
@@ -570,6 +571,7 @@ models:
 
     # ----- FL2VA 4 步 turbo LoRA（方案 T4 用，768p 优化版） -----
     - id: h3-turbo-lora-fl2v-4step
+      size_bytes: 1956192992
       role: lora
       filename: minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors
       target_dir: video/minimax-h3/loras
@@ -585,6 +587,7 @@ models:
 
     # ----- Ref2VA 4 步 turbo LoRA（方案 T4 + Ref2VA 范式用） -----
     - id: h3-turbo-lora-ref2v-4step
+      size_bytes: 1956193000
       role: lora
       filename: minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
       target_dir: video/minimax-h3/loras
