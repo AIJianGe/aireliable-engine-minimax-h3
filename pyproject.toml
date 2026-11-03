@@ -1,6 +1,6 @@
 [project]
 name = "minimax-h3-video-engine"
-version = "0.6.0"
+version = "1.0.0"
 description = "AIReliable MiniMax-H3 视频生成引擎（全自定义模式）"
 requires-python = ">=3.10,<3.13"
 dependencies = []

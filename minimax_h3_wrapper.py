@@ -43,6 +43,12 @@ from typing import Any, Optional
 from .lora_manager import LoRAManager
 from .scheme_manager import SchemeConfig
 
+# 任务 71：设备探测 / 显存查询统一走 SDK（平台与引擎同一份事实源）
+from aireliable_engine.device import (
+    query_free_vram_gb as _sdk_query_free_vram_gb,
+    resolve_device as _sdk_resolve_device,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -3760,6 +3766,9 @@ class MiniMaxH3Wrapper:
     def _check_vram_available(self, device: str, required_gb: float) -> None:
         """显存预检：空闲显存不足时抛 RuntimeError。
 
+        任务 71：显存查询改用 SDK ``query_free_vram_gb(source="torch")``，
+        保持与原 ``torch.cuda.mem_get_info()`` 相同的数据源。
+
         Args:
             device: 推理设备
             required_gb: 模型预估需要的显存（GB）
@@ -3770,37 +3779,31 @@ class MiniMaxH3Wrapper:
         if not device.startswith("cuda"):
             return  # CPU 模式无需预检
 
-        try:
-            import torch
-            if not torch.cuda.is_available():
-                return
-            free_bytes, _total_bytes = torch.cuda.mem_get_info()
-            free_gb = free_bytes / (1024 ** 3)
-            if free_gb < required_gb:
-                self._logger.warning(
-                    "显存预检失败: free=%.2fGB < required=%.2fGB",
-                    free_gb, required_gb,
-                )
-                raise RuntimeError(
-                    f"GPU 显存不足：空闲 {free_gb:.2f}GB < 需要 {required_gb}GB。"
-                    f"建议：1) 关闭其他占用显存的程序 2) 切换到更低的 offload 级别（L2 / L3）"
-                    f" 3) 卸载其他已加载的引擎"
-                )
-            self._logger.info(
-                "显存预检通过: free=%.2fGB >= required=%.2fGB",
+        free_gb = _sdk_query_free_vram_gb(source="torch")
+        if free_gb is None:
+            # torch 不可用 / 查询异常 → 与旧实现一致：跳过预检
+            self._logger.warning("显存预检异常（跳过）: torch 显存查询不可用")
+            return
+
+        if free_gb < required_gb:
+            self._logger.warning(
+                "显存预检失败: free=%.2fGB < required=%.2fGB",
                 free_gb, required_gb,
             )
-        except RuntimeError as e:
-            if "显存不足" in str(e):
-                raise  # 友好错误直接抛出
-            self._logger.warning("显存预检异常（跳过）: %s", e)
-        except Exception as e:
-            self._logger.warning("显存预检异常（跳过）: %s", e)
+            raise RuntimeError(
+                f"GPU 显存不足：空闲 {free_gb:.2f}GB < 需要 {required_gb}GB。"
+                f"建议：1) 关闭其他占用显存的程序 2) 切换到更低的 offload 级别（L2 / L3）"
+                f" 3) 卸载其他已加载的引擎"
+            )
+        self._logger.info(
+            "显存预检通过: free=%.2fGB >= required=%.2fGB",
+            free_gb, required_gb,
+        )
 
     # ============ 工具方法 ============
 
     def _resolve_device(self, device: str) -> str:
-        """解析设备字符串。
+        """解析设备字符串（任务 71：委托 SDK ``device.resolve_device``）。
 
         Args:
             device: auto / cpu / cuda:0 / cuda:1
@@ -3808,15 +3811,9 @@ class MiniMaxH3Wrapper:
         Returns:
             实际设备字符串（auto → cuda:0 或 cpu）
         """
-        if device == "auto":
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    return "cuda:0"
-                return "cpu"
-            except ImportError:
-                return "cpu"
-        return device
+        if device != "auto":
+            return device
+        return _sdk_resolve_device("auto", cuda_index=0)
 
     @staticmethod
     def _parse_vram_required(vram_str: str) -> float:

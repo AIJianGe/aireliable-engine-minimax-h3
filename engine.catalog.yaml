@@ -1,0 +1,44 @@
+# 开源引擎中心展示元数据（任务 80 / T4.1）
+schema: 1
+engine_id: minimax_h3_video_a1b2c3
+
+name:
+  zh: "MiniMax H3 视频生成"
+  en: "MiniMax-H3 Video"
+
+description:
+  zh: "MiniMax H3 视频生成引擎：支持文生视频、图生视频、首尾帧与多宫格，提供 SDNQ 4bit 与 BF16 四套方案。"
+  en: "MiniMax H3 video engine supporting text-to-video, image-to-video, first/last-frame and grid modes, with SDNQ 4-bit and BF16 variants."
+
+category: video
+tags:
+  - text-to-video
+  - image-to-video
+  - video-edit
+
+repository:
+  github: AIJianGe/aireliable-engine-minimax-h3
+  gitee: AIJianGe/aireliable-engine-minimax-h3
+
+cover: catalog/covers/minimax_h3_video_a1b2c3.webp
+
+requirements:
+  python: ">=3.10,<3.13"
+  torch: ">=2.5.0"
+  gpu: required
+
+license: PolyForm-Noncommercial-1.0.0
+
+description_long:
+  zh: |-
+    MiniMax H3 视频引擎覆盖四种输入形态：文生视频、图生视频、首尾帧过渡以及多宫格分镜，既能生成单镜头，也能一次产出分镜序列。
+
+    目录提供 SDNQ 4bit 与 BF16 两套量化路线（合计四套变体）：BF16 画质优先，SDNQ 4bit 显著降低显存占用，便于在消费级显卡上出片。
+
+    需要 NVIDIA GPU 与 torch >= 2.5.0；显存不足时可通过平台切换到更低精度变体，或降低分辨率与帧数。
+  en: |-
+    MiniMax H3 covers four input modes: text-to-video, image-to-video, first/last-frame transitions and multi-grid storyboards, so it can produce a single shot or a storyboard sequence in one run.
+
+    Two quantization lines are offered, SDNQ 4-bit and BF16 (four variants in total): BF16 favours quality, while SDNQ 4-bit sharply reduces VRAM usage for consumer cards.
+
+    An NVIDIA GPU and torch >= 2.5.0 are required. When memory is short, switch to a lower-precision variant or reduce resolution and frame count.
